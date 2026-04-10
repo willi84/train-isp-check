@@ -24,19 +24,93 @@ function isLikelyTrainIsp(value) {
   return String(value || "").toLowerCase().includes("icomera");
 }
 
+function getRequestOrigin(req) {
+  return req.headers.origin || "";
+}
+
+function isLocalhostOrigin(originUrl) {
+  return originUrl.hostname === "localhost" || originUrl.hostname === "127.0.0.1";
+}
+
+function isVercelOrigin(originUrl) {
+  return originUrl.hostname.endsWith(".vercel.app");
+}
+
+function getConfiguredOrigins() {
+  return [process.env.CORS_ALLOWED_ORIGINS, process.env.APP_ORIGIN]
+    .filter(Boolean)
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isConfiguredOrigin(origin, configuredOrigins) {
+  return configuredOrigins.includes(origin);
+}
+
+function getAllowedOrigin(req) {
+  const origin = getRequestOrigin(req);
+  if (!origin) return "";
+
+  try {
+    const originUrl = new URL(origin);
+    const configuredOrigins = getConfiguredOrigins();
+
+    if (isLocalhostOrigin(originUrl)) return origin;
+    if (isVercelOrigin(originUrl)) return origin;
+    if (isConfiguredOrigin(origin, configuredOrigins)) return origin;
+
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function setCorsHeaders(req, res) {
+  const allowedOrigin = getAllowedOrigin(req);
+
+  if (allowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+    res.setHeader("Vary", "Origin");
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+
+  return allowedOrigin;
+}
+
+function respondJson(req, res, statusCode, payload) {
+  setCorsHeaders(req, res);
+  return res.status(statusCode).json(payload);
+}
+
 export default async function handler(req, res) {
   try {
+    const allowedOrigin = setCorsHeaders(req, res);
+
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+
+    if (getRequestOrigin(req) && !allowedOrigin) {
+      return res.status(403).json({
+        error: "Origin not allowed"
+      });
+    }
+
     const ip = normalizeIp(getClientIp(req));
 
     if (!ip) {
-      return res.status(400).json({
+      return respondJson(req, res, 400, {
         error: "Could not determine client IP"
       });
     }
 
     const response = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json`);
     if (!response.ok) {
-      return res.status(502).json({
+      return respondJson(req, res, 502, {
         error: `IP lookup failed with status ${response.status}`
       });
     }
@@ -44,14 +118,14 @@ export default async function handler(req, res) {
     const data = await response.json();
     const isp = data.org || data.company?.name || "";
 
-    return res.status(200).json({
+    return respondJson(req, res, 200, {
       ip,
       isp,
       isTrainLikely: isLikelyTrainIsp(isp),
       raw: data
     });
   } catch (error) {
-    return res.status(500).json({
+    return respondJson(req, res, 500, {
       error: error instanceof Error ? error.message : "Unknown error"
     });
   }
