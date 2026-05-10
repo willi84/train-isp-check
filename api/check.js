@@ -17,6 +17,7 @@ const TRAIN_TERMS = [
   "rmv",
   "fernverkehr"
 ];
+const ALWAYS_ALLOWED_KEYS = ["telekom"];
 
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
@@ -92,6 +93,16 @@ function isRelevantTrainContext(context) {
   return TRAIN_TERMS.some((term) => normalized.includes(term));
 }
 
+function shouldIncludeMatcher(key, context) {
+  const normalizedKey = normalizeText(key);
+
+  if (ALWAYS_ALLOWED_KEYS.includes(normalizedKey)) {
+    return true;
+  }
+
+  return isRelevantTrainContext(context);
+}
+
 function extractTrainIspMatchers(sheetJson) {
   const rows = sheetJson?.table?.rows || [];
   const { keyColumn, contextColumn } = detectColumnsFromHeader(rows);
@@ -111,7 +122,7 @@ function extractTrainIspMatchers(sheetJson) {
       continue;
     }
 
-    if (!isRelevantTrainContext(context)) {
+    if (!shouldIncludeMatcher(key, context)) {
       continue;
     }
 
