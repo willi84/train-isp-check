@@ -20,8 +20,69 @@ function normalizeIp(ip) {
   return ip;
 }
 
-function isLikelyTrainIsp(value) {
-  return String(value || "").toLowerCase().includes("icomera");
+function parseGoogleVisualizationJson(text) {
+  const match = String(text || "").match(/google\.visualization\.Query\.setResponse\((.*)\);?\s*$/s);
+  if (!match) {
+    throw new Error("Could not parse Google Sheets response");
+  }
+
+  return JSON.parse(match[1]);
+}
+
+function getCellValue(cell) {
+  return cell?.v ?? "";
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isRelevantTrainContext(context) {
+  const normalized = normalizeText(context);
+  return normalized.includes("zug") || normalized.includes("train") || normalized.includes("icomera");
+}
+
+function extractTrainIspMatchers(sheetJson) {
+  const rows = sheetJson?.table?.rows || [];
+  const matchers = [];
+
+  for (const row of rows) {
+    const cells = row?.c || [];
+    const key = String(getCellValue(cells[0]) || "").trim();
+    const context = String(getCellValue(cells[2]) || "").trim();
+
+    if (!key || !context) {
+      continue;
+    }
+
+    if (!isRelevantTrainContext(context)) {
+      continue;
+    }
+
+    matchers.push({
+      key: normalizeText(key),
+      context
+    });
+  }
+
+  return matchers;
+}
+
+async function getTrainIspMatchers() {
+  const response = await fetch("https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI");
+
+  if (!response.ok) {
+    throw new Error(`Google Sheets lookup failed with status ${response.status}`);
+  }
+
+  const text = await response.text();
+  const sheetJson = parseGoogleVisualizationJson(text);
+  return extractTrainIspMatchers(sheetJson);
+}
+
+function isLikelyTrainIsp(value, matchers) {
+  const normalizedValue = normalizeText(value);
+  return matchers.some(({ key }) => key && normalizedValue.includes(key));
 }
 
 function getRequestOrigin(req) {
@@ -113,20 +174,27 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json`);
-    if (!response.ok) {
+    const [ipResponse, trainIspMatchers] = await Promise.all([
+      fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json`),
+      getTrainIspMatchers()
+    ]);
+
+    if (!ipResponse.ok) {
       return respondJson(req, res, 502, {
-        error: `IP lookup failed with status ${response.status}`
+        error: `IP lookup failed with status ${ipResponse.status}`
       });
     }
 
-    const data = await response.json();
+    const data = await ipResponse.json();
     const isp = data.org || data.company?.name || "";
+    const matchedEntry = trainIspMatchers.find(({ key }) => key && normalizeText(isp).includes(key));
 
     return respondJson(req, res, 200, {
       ip,
       isp,
-      isTrainLikely: isLikelyTrainIsp(isp),
+      isTrainLikely: isLikelyTrainIsp(isp, trainIspMatchers),
+      matchedKey: matchedEntry?.key || "",
+      matchContext: matchedEntry?.context || "",
       raw: data
     });
   } catch (error) {
