@@ -6,7 +6,16 @@ const TRAIN_TERMS = [
   "bahn",
   "onboard",
   "on board",
-  "wifi"
+  "wifi",
+  "db",
+  "ice",
+  "ic",
+  "ec",
+  "re",
+  "rb",
+  "odeg",
+  "rmv",
+  "fernverkehr"
 ];
 
 function getClientIp(req) {
@@ -56,55 +65,22 @@ function rowToValues(row) {
   return (row?.c || []).map((cell) => String(getCellValue(cell) || "").trim());
 }
 
-function scoreColumn(values, columnIndex) {
-  let score = 0;
+function detectColumnsFromHeader(rows) {
+  const firstRow = rows[0];
+  const values = rowToValues(firstRow);
 
-  for (const value of values) {
-    const normalized = normalizeText(value[columnIndex]);
-    if (!normalized) continue;
+  let keyColumn = -1;
+  let contextColumn = -1;
 
-    if (columnIndex === 0) {
-      if (/^[a-z0-9._ -]+$/i.test(value[columnIndex])) score += 2;
-      if (normalized.length <= 40) score += 1;
+  for (let index = 0; index < values.length; index += 1) {
+    const normalized = normalizeText(values[index]);
+
+    if (normalized === "key") {
+      keyColumn = index;
     }
 
-    if (TRAIN_TERMS.some((term) => normalized.includes(term))) {
-      score += 4;
-    }
-  }
-
-  return score;
-}
-
-function detectColumns(rows) {
-  const values = rows.map(rowToValues).filter((row) => row.some(Boolean));
-  const maxColumns = values.reduce((max, row) => Math.max(max, row.length), 0);
-
-  if (!maxColumns) {
-    return { keyColumn: 0, contextColumn: 2 };
-  }
-
-  let keyColumn = 0;
-  let keyScore = -1;
-  let contextColumn = 0;
-  let contextScore = -1;
-
-  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
-    const score = scoreColumn(values, columnIndex);
-
-    if (score > keyScore) {
-      keyScore = score;
-      keyColumn = columnIndex;
-    }
-  }
-
-  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
-    if (columnIndex === keyColumn) continue;
-    const score = scoreColumn(values, columnIndex);
-
-    if (score > contextScore) {
-      contextScore = score;
-      contextColumn = columnIndex;
+    if (normalized === "kontext") {
+      contextColumn = index;
     }
   }
 
@@ -118,10 +94,15 @@ function isRelevantTrainContext(context) {
 
 function extractTrainIspMatchers(sheetJson) {
   const rows = sheetJson?.table?.rows || [];
-  const { keyColumn, contextColumn } = detectColumns(rows);
+  const { keyColumn, contextColumn } = detectColumnsFromHeader(rows);
+
+  if (keyColumn === -1 || contextColumn === -1) {
+    throw new Error("Could not detect KEY and Kontext columns from sheet header");
+  }
+
   const matchers = [];
 
-  for (const row of rows) {
+  for (const row of rows.slice(1)) {
     const values = rowToValues(row);
     const key = values[keyColumn] || "";
     const context = values[contextColumn] || "";
