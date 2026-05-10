@@ -37,7 +37,12 @@ function isVercelOrigin(originUrl) {
 }
 
 function getConfiguredOrigins() {
-  return [process.env.CORS_ALLOWED_ORIGINS, process.env.APP_ORIGIN]
+  return [
+    process.env.CORS_ALLOWED_ORIGINS,
+    process.env.APP_ORIGIN,
+    "https://pendler-alarm.de",
+    "https://pendler-alarm-de.vercel.app"
+  ]
     .filter(Boolean)
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
