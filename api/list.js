@@ -1,3 +1,5 @@
+const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI";
+
 function parseGoogleVisualizationJson(text) {
   const match = String(text || "").match(/google\.visualization\.Query\.setResponse\((.*)\);?\s*$/s);
   if (!match) {
@@ -12,42 +14,74 @@ function getCellValue(cell) {
 }
 
 function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
-function isRelevantTrainContext(context) {
-  const normalized = normalizeText(context);
-  return normalized.includes("zug") || normalized.includes("train") || normalized.includes("icomera");
+function rowToValues(row) {
+  return (row?.c || []).map((cell) => String(getCellValue(cell) || "").trim());
 }
 
-function extractTrainIspMatchers(sheetJson) {
+function detectColumnsFromHeader(rows) {
+  const firstRow = rows[0];
+  const values = rowToValues(firstRow);
+
+  let keyColumn = -1;
+  let contextColumn = -1;
+
+  for (let index = 0; index < values.length; index += 1) {
+    const normalized = normalizeText(values[index]);
+
+    if (normalized === "key") {
+      keyColumn = index;
+    }
+
+    if (normalized === "kontext") {
+      contextColumn = index;
+    }
+  }
+
+  return { keyColumn, contextColumn, headers: values };
+}
+
+function extractSheetItems(sheetJson) {
   const rows = sheetJson?.table?.rows || [];
-  const matchers = [];
+  const { keyColumn, contextColumn, headers } = detectColumnsFromHeader(rows);
 
-  for (const row of rows) {
-    const cells = row?.c || [];
-    const key = String(getCellValue(cells[0]) || "").trim();
-    const context = String(getCellValue(cells[2]) || "").trim();
+  if (keyColumn === -1 || contextColumn === -1) {
+    throw new Error("Could not detect KEY and Kontext columns from sheet header");
+  }
+
+  const items = [];
+
+  for (const row of rows.slice(1)) {
+    const values = rowToValues(row);
+    const key = values[keyColumn] || "";
+    const context = values[contextColumn] || "";
 
     if (!key || !context) {
       continue;
     }
 
-    if (!isRelevantTrainContext(context)) {
-      continue;
-    }
-
-    matchers.push({
-      key: normalizeText(key),
+    items.push({
+      key,
       context
     });
   }
 
-  return matchers;
+  return {
+    items,
+    keyColumn,
+    contextColumn,
+    headers
+  };
 }
 
-async function getTrainIspMatchers() {
-  const response = await fetch("https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI");
+async function getSheetItems() {
+  const response = await fetch(GOOGLE_SHEET_URL);
 
   if (!response.ok) {
     throw new Error(`Google Sheets lookup failed with status ${response.status}`);
@@ -55,7 +89,7 @@ async function getTrainIspMatchers() {
 
   const text = await response.text();
   const sheetJson = parseGoogleVisualizationJson(text);
-  return extractTrainIspMatchers(sheetJson);
+  return extractSheetItems(sheetJson);
 }
 
 function getRequestOrigin(req) {
@@ -139,14 +173,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const matchers = await getTrainIspMatchers();
+    const result = await getSheetItems();
 
     return respondJson(req, res, 200, {
-      count: matchers.length,
-      items: matchers.reduce((accumulator, matcher) => {
-        accumulator[matcher.key] = matcher.context;
-        return accumulator;
-      }, {})
+      count: result.items.length,
+      items: result.items,
+      detectedColumns: {
+        keyColumn: result.keyColumn,
+        contextColumn: result.contextColumn
+      },
+      headers: result.headers
     });
   } catch (error) {
     return respondJson(req, res, 500, {
