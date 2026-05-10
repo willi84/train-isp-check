@@ -1,3 +1,14 @@
+const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI";
+const TRAIN_TERMS = [
+  "zug",
+  "train",
+  "rail",
+  "bahn",
+  "onboard",
+  "on board",
+  "wifi"
+];
+
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
@@ -34,22 +45,86 @@ function getCellValue(cell) {
 }
 
 function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function rowToValues(row) {
+  return (row?.c || []).map((cell) => String(getCellValue(cell) || "").trim());
+}
+
+function scoreColumn(values, columnIndex) {
+  let score = 0;
+
+  for (const value of values) {
+    const normalized = normalizeText(value[columnIndex]);
+    if (!normalized) continue;
+
+    if (columnIndex === 0) {
+      if (/^[a-z0-9._ -]+$/i.test(value[columnIndex])) score += 2;
+      if (normalized.length <= 40) score += 1;
+    }
+
+    if (TRAIN_TERMS.some((term) => normalized.includes(term))) {
+      score += 4;
+    }
+  }
+
+  return score;
+}
+
+function detectColumns(rows) {
+  const values = rows.map(rowToValues).filter((row) => row.some(Boolean));
+  const maxColumns = values.reduce((max, row) => Math.max(max, row.length), 0);
+
+  if (!maxColumns) {
+    return { keyColumn: 0, contextColumn: 2 };
+  }
+
+  let keyColumn = 0;
+  let keyScore = -1;
+  let contextColumn = 0;
+  let contextScore = -1;
+
+  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
+    const score = scoreColumn(values, columnIndex);
+
+    if (score > keyScore) {
+      keyScore = score;
+      keyColumn = columnIndex;
+    }
+  }
+
+  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
+    if (columnIndex === keyColumn) continue;
+    const score = scoreColumn(values, columnIndex);
+
+    if (score > contextScore) {
+      contextScore = score;
+      contextColumn = columnIndex;
+    }
+  }
+
+  return { keyColumn, contextColumn };
 }
 
 function isRelevantTrainContext(context) {
   const normalized = normalizeText(context);
-  return normalized.includes("zug") || normalized.includes("train") || normalized.includes("icomera");
+  return TRAIN_TERMS.some((term) => normalized.includes(term));
 }
 
 function extractTrainIspMatchers(sheetJson) {
   const rows = sheetJson?.table?.rows || [];
+  const { keyColumn, contextColumn } = detectColumns(rows);
   const matchers = [];
 
   for (const row of rows) {
-    const cells = row?.c || [];
-    const key = String(getCellValue(cells[0]) || "").trim();
-    const context = String(getCellValue(cells[2]) || "").trim();
+    const values = rowToValues(row);
+    const key = values[keyColumn] || "";
+    const context = values[contextColumn] || "";
 
     if (!key || !context) {
       continue;
@@ -65,11 +140,11 @@ function extractTrainIspMatchers(sheetJson) {
     });
   }
 
-  return matchers;
+  return { matchers, keyColumn, contextColumn };
 }
 
 async function getTrainIspMatchers() {
-  const response = await fetch("https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI");
+  const response = await fetch(GOOGLE_SHEET_URL);
 
   if (!response.ok) {
     throw new Error(`Google Sheets lookup failed with status ${response.status}`);
@@ -174,7 +249,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const [ipResponse, trainIspMatchers] = await Promise.all([
+    const [ipResponse, matcherResult] = await Promise.all([
       fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json`),
       getTrainIspMatchers()
     ]);
@@ -187,14 +262,19 @@ export default async function handler(req, res) {
 
     const data = await ipResponse.json();
     const isp = data.org || data.company?.name || "";
-    const matchedEntry = trainIspMatchers.find(({ key }) => key && normalizeText(isp).includes(key));
+    const normalizedIsp = normalizeText(isp);
+    const matchedEntry = matcherResult.matchers.find(({ key }) => key && normalizedIsp.includes(key));
 
     return respondJson(req, res, 200, {
       ip,
       isp,
-      isTrainLikely: isLikelyTrainIsp(isp, trainIspMatchers),
+      isTrainLikely: isLikelyTrainIsp(isp, matcherResult.matchers),
       matchedKey: matchedEntry?.key || "",
       matchContext: matchedEntry?.context || "",
+      detectedColumns: {
+        keyColumn: matcherResult.keyColumn,
+        contextColumn: matcherResult.contextColumn
+      },
       raw: data
     });
   } catch (error) {
