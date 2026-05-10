@@ -29,11 +29,16 @@ function detectColumnsFromHeader(rows) {
   const firstRow = rows[0];
   const values = rowToValues(firstRow);
 
+  let iconColumn = 0;
   let keyColumn = -1;
   let contextColumn = -1;
 
   for (let index = 0; index < values.length; index += 1) {
     const normalized = normalizeText(values[index]);
+
+    if (normalized === "icon") {
+      iconColumn = index;
+    }
 
     if (normalized === "key") {
       keyColumn = index;
@@ -44,12 +49,12 @@ function detectColumnsFromHeader(rows) {
     }
   }
 
-  return { keyColumn, contextColumn, headers: values };
+  return { iconColumn, keyColumn, contextColumn, headers: values };
 }
 
 function extractSheetItems(sheetJson) {
   const rows = sheetJson?.table?.rows || [];
-  const { keyColumn, contextColumn, headers } = detectColumnsFromHeader(rows);
+  const { iconColumn, keyColumn, contextColumn, headers } = detectColumnsFromHeader(rows);
 
   if (keyColumn === -1 || contextColumn === -1) {
     throw new Error("Could not detect KEY and Kontext columns from sheet header");
@@ -59,6 +64,7 @@ function extractSheetItems(sheetJson) {
 
   for (const row of rows.slice(1)) {
     const values = rowToValues(row);
+    const icon = values[iconColumn] || "";
     const key = values[keyColumn] || "";
     const context = values[contextColumn] || "";
 
@@ -67,6 +73,7 @@ function extractSheetItems(sheetJson) {
     }
 
     items.push({
+      icon,
       key,
       context
     });
@@ -74,6 +81,7 @@ function extractSheetItems(sheetJson) {
 
   return {
     items,
+    iconColumn,
     keyColumn,
     contextColumn,
     headers
@@ -179,6 +187,7 @@ export default async function handler(req, res) {
       count: result.items.length,
       items: result.items,
       detectedColumns: {
+        iconColumn: result.iconColumn,
         keyColumn: result.keyColumn,
         contextColumn: result.contextColumn
       },
