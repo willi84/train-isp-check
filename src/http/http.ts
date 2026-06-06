@@ -1,11 +1,11 @@
-const { ALLOWED_ORIGINS } = require('./http.config');
+import { ALLOWED_ORIGINS } from "./http.config.js";
 
 /**
  * 🎯 get the client IP address from the request headers
  * @param {object} req the request object
  * @returns {string} the client IP address
  */
-const getClientIp = (req) => {
+export const getClientIp = (req) => {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
     return forwarded.split(",")[0].trim();
@@ -24,40 +24,40 @@ const getClientIp = (req) => {
  * @param {*} req the request object
  * @returns {string} the origin of the request
  */
-const getRequestOrigin = (req) => {
-  return req.headers.origin || '';
-}
+export const getRequestOrigin = (req) => {
+  return req.headers.origin || "";
+};
 
 /**
  * 🎯 get the configured origins from the allowed origins
  * @param {string[]} allowedOrigins the allowed origins
  * @returns {string[]} the configured origins
  */
-const getConfiguredOrigins = (allowedOrigins) => {
+export const getConfiguredOrigins = (allowedOrigins) => {
   return allowedOrigins
     .filter(Boolean)
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
     .filter(Boolean);
-}
+};
 
 /**
  * 🎯 check if the origin is localhost
  * @param {URL} originUrl the origin URL
  * @returns {boolean} true if the origin is localhost, false otherwise
  */
-const isLocalhostOrigin = (originUrl) => {
+export const isLocalhostOrigin = (originUrl) => {
   return originUrl.hostname === "localhost" || originUrl.hostname === "127.0.0.1";
-}
+};
 
 /**
  * 🎯 check if the origin is a Vercel deployment
  * @param {URL} originUrl the origin URL
  * @returns {boolean} true if the origin is a Vercel deployment, false otherwise
  */
-const isVercelOrigin = (originUrl) => {
+export const isVercelOrigin = (originUrl) => {
   return originUrl.hostname.endsWith(".vercel.app");
-}
+};
 
 /**
  * 🎯 check if the origin is a configured origin
@@ -65,9 +65,9 @@ const isVercelOrigin = (originUrl) => {
  * @param {string[]} configuredOrigins the configured origins
  * @returns {boolean} true if the origin is a configured origin, false otherwise
  */
-const isConfiguredOrigin = (origin, configuredOrigins) => {
+export const isConfiguredOrigin = (origin, configuredOrigins) => {
   return configuredOrigins.includes(origin);
-}
+};
 
 /**
  * 🎯 determine the allowed origin for the request and set CORS headers accordingly
@@ -76,7 +76,7 @@ const isConfiguredOrigin = (origin, configuredOrigins) => {
  */
 const getAllowedOrigin = (req) => {
   const origin = getRequestOrigin(req);
-  if (!origin) return '';
+  if (!origin) return "";
 
   try {
     const originUrl = new URL(origin);
@@ -90,9 +90,9 @@ const getAllowedOrigin = (req) => {
   } catch {
     return "";
   }
-}
+};
 
-const setCorsHeaders = (req, res) => {
+export const setCorsHeaders = (req, res) => {
   const allowedOrigin = getAllowedOrigin(req);
 
   if (allowedOrigin) {
@@ -105,27 +105,17 @@ const setCorsHeaders = (req, res) => {
   res.setHeader("Access-Control-Max-Age", "86400");
 
   return allowedOrigin;
-}
+};
 
 /**
  * 🎯 normalize the IP address
  * @param {string} ip the IP address
  * @returns {string} the normalized IP address
  */
-const normalizeIp = (ip) => {
+export const normalizeIp = (ip) => {
   if (!ip) return "";
   if (ip.startsWith("::ffff:")) {
     return ip.slice(7);
   }
   return ip;
-}
-
-
-exports.getClientIp = getClientIp;
-exports.setCorsHeaders = setCorsHeaders;
-exports.getRequestOrigin = getRequestOrigin;
-exports.getConfiguredOrigins = getConfiguredOrigins;
-exports.isLocalhostOrigin = isLocalhostOrigin;
-exports.isVercelOrigin = isVercelOrigin;
-exports.isConfiguredOrigin = isConfiguredOrigin;
-exports.normalizeIp = normalizeIp;
+};

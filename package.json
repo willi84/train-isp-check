@@ -4,12 +4,27 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
+    "typecheck": "tsc --noEmit"
+  },
+  "wallaby": {
+    "env": {
+      "params": {
+        "runner": "--experimental-vm-modules"
+      }
+    },
+    "testFramework": {
+      "configFile": "./jest.config.js"
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.10.0",
     "eslint": "^10.4.1",
     "globals": "^17.6.0",
-    "jest": "^30.4.2"
+    "jest": "^30.4.2",
+    "typescript": "^5.9.3"
   }
 }

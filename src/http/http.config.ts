@@ -1,4 +1,4 @@
-exports.ALLOWED_ORIGINS = [
+export const ALLOWED_ORIGINS = [
   process.env.CORS_ALLOWED_ORIGINS,
   process.env.APP_ORIGIN,
   "https://pendler-alarm.de",

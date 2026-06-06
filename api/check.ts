@@ -1,23 +1,22 @@
-const { normalizeText } = require("./../src/utils/utils");
-const { getClientIp, setCorsHeaders , getRequestOrigin, normalizeIp} = require("./../src/http/http")
-const { getSheetData, extractTrainIspMatchers } = require("./../src/google/google");
-const { SHEET_ID, SHEET_TAB } = require("./config");
+import { getSheetData, extractTrainIspMatchers } from "./../src/google/google.js";
+import { getClientIp, getRequestOrigin, normalizeIp, setCorsHeaders } from "./../src/http/http.js";
+import { normalizeText } from "./../src/utils/utils.js";
+import { SHEET_ID, SHEET_TAB } from "./check.config.js";
 
-
-async function getTrainIspMatchers() {
-    const sheetJson = await getSheetData(SHEET_ID, SHEET_TAB);
+const getTrainIspMatchers = async () => {
+  const sheetJson = await getSheetData(SHEET_ID, SHEET_TAB);
   return extractTrainIspMatchers(sheetJson);
-}
+};
 
-function isLikelyTrainIsp(value, matchers) {
+const isLikelyTrainIsp = (value, matchers) => {
   const normalizedValue = normalizeText(value);
   return matchers.some(({ key }) => key && normalizedValue.includes(key));
-}
+};
 
-function respondJson(req, res, statusCode, payload) {
+const respondJson = (req, res, statusCode, payload) => {
   setCorsHeaders(req, res);
   return res.status(statusCode).json(payload);
-}
+};
 
 export default async function handler(req, res) {
   try {

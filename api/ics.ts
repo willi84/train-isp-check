@@ -1,9 +1,4 @@
-const {  setCorsHeaders , getRequestOrigin} = require("./../src/http/http")
-
-
-
-
-
+import { getRequestOrigin, setCorsHeaders } from "./../src/http/http.js";
 
 function respondJson(req, res, statusCode, payload) {
   setCorsHeaders(req, res);
@@ -19,13 +14,15 @@ function getTargetUrl(req) {
 function containsSuspiciousUrlInput(value) {
   const input = String(value || "");
   const normalized = input.toLowerCase();
+  const hasControlCharacter = Array.from(input).some((char) => {
+    const code = char.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
 
   if (!input) return false;
   if (input.length > 2048) return true;
   if (/[<>"'`]/.test(input)) return true;
-  
-  // @eslint-disable-next-line no-control-regex
-  if (/[%\x00-\x1f\x7f]/.test(input)) return true;
+  if (hasControlCharacter) return true;
 
   return [
     "javascript:",

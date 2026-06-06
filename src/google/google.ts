@@ -1,35 +1,35 @@
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1trsSsgYBXYmB_Ab8ghQc3OHkJbx_MXrPigNItLvboP0/gviz/tq?tqx=out:json&sheet=WIFI";
+import { normalizeText } from "./../utils/utils.js";
 
-const { normalizeText } = require("./../utils/utils");
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/{id}/gviz/tq?tqx=out:json&sheet={tab}";
 
 /**
  * 🎯 parse the Google Visualization JSONP response
  * @param {string} text the JSONP response text
  * @returns {object} the parsed JSON object
  */
-const parseGoogleVisualizationJson = (text) => {
+export const parseGoogleVisualizationJson = (text) => {
   const match = String(text || "").match(/google\.visualization\.Query\.setResponse\((.*)\);?\s*$/s);
   if (!match) {
     throw new Error("Could not parse Google Sheets response");
   }
 
   return JSON.parse(match[1]);
-}
+};
 
 /**
  * 🎯 get the value of a cell, handling null and undefined values
  * @param {*} cell the cell object
  * @returns {string} the cell value
  */
-const getCellValue = (cell) => {
+export const getCellValue = (cell) => {
   return cell?.v ?? "";
-}
+};
 
-const rowToValues = (row) => {
+export const rowToValues = (row) => {
   return (row?.c || []).map((cell) => String(getCellValue(cell) || "").trim());
-}
+};
 
-const detectColumnsFromHeader = (rows) => {
+export const detectColumnsFromHeader = (rows) => {
   const firstRow = rows[0];
   const values = rowToValues(firstRow);
 
@@ -49,11 +49,9 @@ const detectColumnsFromHeader = (rows) => {
   }
 
   return { keyColumn, contextColumn };
-}
+};
 
-
-
-const extractTrainIspMatchers = (sheetJson) => {
+export const extractTrainIspMatchers = (sheetJson) => {
   const rows = sheetJson?.table?.rows || [];
   const { keyColumn, contextColumn } = detectColumnsFromHeader(rows);
 
@@ -69,9 +67,8 @@ const extractTrainIspMatchers = (sheetJson) => {
     const context = values[contextColumn] || "";
 
     if (!key || !context) {
-        continue;
+      continue;
     }
-    
 
     matchers.push({
       key: normalizeText(key),
@@ -80,22 +77,16 @@ const extractTrainIspMatchers = (sheetJson) => {
   }
 
   return { matchers, keyColumn, contextColumn };
-}
-const getSheetData = async (id, tab) => {
-    const GOOGLE_SHEET_URL = SHEET_URL.replace("{id}", id).replace("{tab}", tab);
-    const response = await fetch(GOOGLE_SHEET_URL);
+};
 
-    if (!response.ok) {
-        throw new Error(`Google Sheets lookup failed with status ${response.status}`);
-    }
+export const getSheetData = async (id, tab) => {
+  const googleSheetUrl = SHEET_URL.replace("{id}", id).replace("{tab}", tab);
+  const response = await fetch(googleSheetUrl);
 
-    const text = await response.text();
-    return parseGoogleVisualizationJson(text);
-}
+  if (!response.ok) {
+    throw new Error(`Google Sheets lookup failed with status ${response.status}`);
+  }
 
-exports.parseGoogleVisualizationJson = parseGoogleVisualizationJson;
-exports.extractTrainIspMatchers = extractTrainIspMatchers;
-exports.getCellValue = getCellValue;
-exports.rowToValues = rowToValues;
-exports.detectColumnsFromHeader = detectColumnsFromHeader;
-exports.getSheetData = getSheetData;
+  const text = await response.text();
+  return parseGoogleVisualizationJson(text);
+};

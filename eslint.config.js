@@ -5,7 +5,6 @@ import globals from "globals";
 const strictRules = {
   "array-callback-return": "error",
   "consistent-return": "error",
-//   curly: ["error", "all"],
   "default-case": "error",
   "dot-notation": "error",
   eqeqeq: ["error", "always"],
@@ -50,31 +49,23 @@ const baseLanguageOptions = {
   }
 };
 
-const commonJsGlobals = {
-  require: "readonly",
-  exports: "readonly",
-  module: "readonly",
-  __dirname: "readonly",
-  __filename: "readonly"
-};
-
 export default defineConfig([
   {
     ignores: ["node_modules/**", "coverage/**"]
   },
   js.configs.recommended,
   {
-    files: ["**/*.js"],
+    files: ["**/*.{js,ts}"],
     languageOptions: baseLanguageOptions,
     rules: strictRules
   },
   {
-    files: ["api/**/*.js", "wallaby.js"],
+    files: ["wallaby.cjs"],
     languageOptions: {
-      ...baseLanguageOptions,
+      ecmaVersion: "latest",
+      sourceType: "commonjs",
       globals: {
-        ...baseLanguageOptions.globals,
-        ...commonJsGlobals
+        ...globals.node
       }
     }
   }
