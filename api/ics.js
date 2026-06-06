@@ -1,64 +1,9 @@
-function getRequestOrigin(req) {
-  return req.headers.origin || "";
-}
+const {  setCorsHeaders , getRequestOrigin} = require("./../src/http/http")
 
-function isLocalhostOrigin(originUrl) {
-  return originUrl.hostname === "localhost" || originUrl.hostname === "127.0.0.1";
-}
 
-function isVercelOrigin(originUrl) {
-  return originUrl.hostname.endsWith(".vercel.app");
-}
 
-function getConfiguredOrigins() {
-  return [
-    process.env.CORS_ALLOWED_ORIGINS,
-    process.env.APP_ORIGIN,
-    "https://pendler-alarm.de",
-    "https://pendler-alarm-de.vercel.app"
-  ]
-    .filter(Boolean)
-    .flatMap((value) => value.split(","))
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
 
-function isConfiguredOrigin(origin, configuredOrigins) {
-  return configuredOrigins.includes(origin);
-}
 
-function getAllowedOrigin(req) {
-  const origin = getRequestOrigin(req);
-  if (!origin) return "";
-
-  try {
-    const originUrl = new URL(origin);
-    const configuredOrigins = getConfiguredOrigins();
-
-    if (isLocalhostOrigin(originUrl)) return origin;
-    if (isVercelOrigin(originUrl)) return origin;
-    if (isConfiguredOrigin(origin, configuredOrigins)) return origin;
-
-    return "";
-  } catch {
-    return "";
-  }
-}
-
-function setCorsHeaders(req, res) {
-  const allowedOrigin = getAllowedOrigin(req);
-
-  if (allowedOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-    res.setHeader("Vary", "Origin");
-  }
-
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
-
-  return allowedOrigin;
-}
 
 function respondJson(req, res, statusCode, payload) {
   setCorsHeaders(req, res);
@@ -78,6 +23,8 @@ function containsSuspiciousUrlInput(value) {
   if (!input) return false;
   if (input.length > 2048) return true;
   if (/[<>"'`]/.test(input)) return true;
+  
+  // @eslint-disable-next-line no-control-regex
   if (/[%\x00-\x1f\x7f]/.test(input)) return true;
 
   return [
